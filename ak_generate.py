@@ -67,14 +67,16 @@ def traverse_folder( subfolder):
          f_full = work_folder + "/" + i
          f_name, f_ext = os.path.splitext( f_full )
          
-         # size in kb
-         f_size=0
-         try:
-            # some microsd files gives access errors
-            f_size = os.path.getsize(f_full) / 1024
-         except:
-            xml_item.setAttribute("size_status", "error getting size")
-            print("Something wrong getting size of: " + f_full )
+#         # size in kb
+#         f_size=0
+#         try:
+#            # some microsd files gives access errors
+#            f_size = os.path.getsize(f_full) / 1024
+#         except:
+#            xml_item.setAttribute("size_status", "error getting size")
+#            print("Something wrong getting size of: " + f_full )
+         
+         f_size = _write_size_attribute( f_full )
 
          album_size=album_size + f_size
 
@@ -109,16 +111,16 @@ def traverse_folder( subfolder):
          f_full = work_folder + "/" + i
          
          # size in kb
-         f_size=0
-         try:
-            # some microsd files gives access errors
-            f_size = os.path.getsize(f_full) / 1024
-         except:
-            xml_item.setAttribute("size_status", "error getting size")
-            print("Something wrong getting size of: " + f_full )
+#         f_size=0
+#         try:
+#            # some microsd files gives access errors
+#            f_size = os.path.getsize(f_full) / 1024
+#         except:
+#            xml_item.setAttribute("size_status", "error getting size")
+#            print("Something wrong getting size of: " + f_full )
 
+         f_size = _get_file_size( f_full )   
          xml_item_comm = xml_doc.createComment( " <item src=\"" + i + "\" size=\"" + str(f_size) + "Kb\" /> " )
-         #xml_item_comm.setText( "<!-- <item src=\"" + i + "\" />  -->" )
 
          xml_album.appendChild( xml_item_comm )
 
@@ -129,6 +131,50 @@ def traverse_folder( subfolder):
    # iterate over the rest of subfolders
    for ss in children_folders:
       traverse_folder( ss )
+
+
+
+
+#
+# Retrieves size in kb from a full_path file
+#  -1 if something wrong
+#
+def _write_size_attribute( f_full ):
+
+   f_size = 0
+   
+   # some microsd files gives access errors
+   try:
+      f_size = _get_file_size(f_full) 
+      xml_item.setAttribute("size", str(f_size/1024) + "Mb" )
+   except:
+      xml_item.setAttribute("size_status", "error getting size")
+
+   finally:
+      return f_size
+
+
+
+#
+# Retrieves size in kb from a full_path file
+#  -1 if something wrong
+#
+def _get_file_size( f_full ):
+
+   f_size = 0
+   
+   # some microsd files gives access errors
+   try:
+      f_size = os.path.getsize(f_full) / 1024
+   except:
+      print("Something wrong getting size of: " + f_full )
+      raise
+
+   finally:
+      return f_size
+
+
+
 
 
 #
@@ -145,13 +191,15 @@ file_types_comm = ['jpg', 'png', 'gif']
 
 p = optparse.OptionParser()
 
-p.add_option("-s", "--source_root_path", action="store", type="string", dest="source_root_path")
+p.add_option("-s", "--source_root_path", action="store", type="string", dest="source_root_path", \
+                                       help="source path to start search" )
 #p.add_option("-f", "--file_types", action="store", type="string", dest="file_type")
-p.add_option("-i", "--section_id", action="store", type="string", dest="section_id")
+p.add_option("-i", "--section_id", action="store", type="string", dest="section_id", help="optional section id. Default last source path" )
+p.add_option("-o", "--output_path", action="store", type="string", dest="output_path", default="output_data", help="optional output generated files path" )
 
 # flac, mp3, dsf, ... or empty means everything
 #p.set_defaults( file_type="flac alac mp3 cue wav dsd dsf ogg" )
-p.set_defaults( section_id="" )
+#p.set_defaults( section_id="" )
 
 opt,args = p.parse_args()
 
@@ -162,16 +210,18 @@ if opt.source_root_path == None:
 if opt.source_root_path.endswith('/'):
    opt.source_root_path = opt.source_root_path[:-1]
 
-if opt.section_id == "":
+if opt.section_id == None: #"":
    opt.section_id = opt.source_root_path.replace('/','_') #os.path.basename( opt.root_path ) + "_"
    # remove first '/'
    opt.section_id = opt.section_id[:0] + opt.section_id[1:]
 
-   
+#if opt.generated_output_path == None:
+#   opt.generated_output_path = "generated_data"
+
 
 print("")
 print("source root_path    : " + opt.source_root_path )
-#print("target root_path    : " + opt.target_root_path )
+print("output_path    : " + opt.output_path )
 #print("file types   : " + opt.file_types ) 
 print("section id : " + opt.section_id )
 
@@ -182,7 +232,11 @@ xml_root.appendChild(xml_section)
 
 traverse_folder( "" )
 
-xml_doc.writexml( open( opt.section_id + ".xml",'w'), indent="  ", addindent="  ", newl='\n' )
+
+if not os.path.exists(opt.output_path):
+   os.makedirs(opt.output_path)
+
+xml_doc.writexml( open( opt.output_path + "/" + opt.section_id + ".xml",'w'), indent="  ", addindent="  ", newl='\n' )
 xml_doc.unlink()
 
 
