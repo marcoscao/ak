@@ -67,15 +67,6 @@ def traverse_folder( subfolder):
          f_full = work_folder + "/" + i
          f_name, f_ext = os.path.splitext( f_full )
          
-#         # size in kb
-#         f_size=0
-#         try:
-#            # some microsd files gives access errors
-#            f_size = os.path.getsize(f_full) / 1024
-#         except:
-#            xml_item.setAttribute("size_status", "error getting size")
-#            print("Something wrong getting size of: " + f_full )
-         
          f_size = _write_size_attribute( f_full )
 
          album_size=album_size + f_size
@@ -109,15 +100,6 @@ def traverse_folder( subfolder):
       for i in items_comm_set:
          print( "- adding COMMENTED: " + i )
          f_full = work_folder + "/" + i
-         
-         # size in kb
-#         f_size=0
-#         try:
-#            # some microsd files gives access errors
-#            f_size = os.path.getsize(f_full) / 1024
-#         except:
-#            xml_item.setAttribute("size_status", "error getting size")
-#            print("Something wrong getting size of: " + f_full )
 
          f_size = _get_file_size( f_full )   
          xml_item_comm = xml_doc.createComment( " <item src=\"" + i + "\" size=\"" + str(f_size) + "Kb\" /> " )
@@ -210,13 +192,11 @@ if opt.source_root_path == None:
 if opt.source_root_path.endswith('/'):
    opt.source_root_path = opt.source_root_path[:-1]
 
-if opt.section_id == None: #"":
-   opt.section_id = opt.source_root_path.replace('/','_') #os.path.basename( opt.root_path ) + "_"
+if opt.section_id == None: 
+   #opt.section_id = opt.source_root_path.replace('/','_') #os.path.basename( opt.root_path ) + "_"
+   opt.section_id = os.path.basename( os.path.normpath( opt.source_root_path ) ); 
    # remove first '/'
-   opt.section_id = opt.section_id[:0] + opt.section_id[1:]
-
-#if opt.generated_output_path == None:
-#   opt.generated_output_path = "generated_data"
+   #opt.section_id = opt.section_id[:0] + opt.section_id[1:]
 
 
 print("")
