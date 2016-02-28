@@ -94,6 +94,16 @@ class file_type_info:
 
 
 
+#
+# Encapsulates item_file meta info data to build each xml item node
+#
+class item_type_info:
+   
+   def __init__( self, work_folder, item, is_comment = False ):
+      
+      self.item = item
+      self.is_comment = is_comment
+      self.work_folder = work_folder
 
 
 
@@ -102,99 +112,36 @@ class file_type_info:
 
 #
 # Iterating over directory tree
-# TODO: Pending refactor this method
 #
 
 def traverse_folder( subfolder):
-   #print("* Traversing folder: " + root_folder )
-   work_folder = opt.source_root_path + "/" + subfolder
-   n = 0
-   print( "subfolder : " + subfolder )
-   #print( "Subdirectories of " + work_folder + " :")
-   #for path_name, dirs, files in os.walk( root_folder ):
+   
    if subfolder!="":
       subfolder = subfolder + "/"
 
-   folder_has_file_types = False
+   work_folder = opt.source_root_path + "/" + subfolder
+   #for path_name, dirs, files in os.walk( root_folder ):
+
    children_folders = set()
+   items_type_info_set = set()
 
-   items_set = set()
-   items_comm_set = set()
-   items_rest = set()
+   # get items from subfolder
+   process_subfolder_data( subfolder, children_folders, items_type_info_set )
 
-   # Here store subfolders, items and commented_items
-   try:
-      n = 0
-      for ss in os.listdir(work_folder):
-         if os.path.isdir( work_folder + "/" + ss ):
-            #print("dir entry   : " + ss )
-            ###traverse_folder( subfolder + ss )
-            children_folders.add( subfolder + ss )
+   # if folder_has_file_types or commented ones create the album:
+   if items_type_info_set:
 
-         #if folder_has_file_types==False and fnmatch.fnmatch( ss, "*." + "flac" ): #opt.file_type ):
-         for t in file_types:
-            if fnmatch.fnmatch( ss, "*." + t ): #opt.file_type ):
-               items_set.add( ss )
-               #print("** Folder " + subfolder + " has files of type *." + opt.file_type)
-               folder_has_file_types = True
-         
-         for t in file_types_comm:
-            if fnmatch.fnmatch( ss, "*." + t ):
-               items_comm_set.add(ss )
-               #folder_has_file_types = True
-
-   except OSError as e:
-      log_error( "Error iterating over: " + work_folder + "\nException:\n" + repr(e) )
-      return
-
-
-   if folder_has_file_types:
       xml_album = xml_doc.createElement( "album" )
       xml_album.setAttribute("src", subfolder )
-
       xml_section.appendChild( xml_album )
 
       album_size=0
       log_album( subfolder )
 
-      for i in items_set:
-         #print(   "- adding: " + i ); 
+      # process songs
+      album_size = process_album_items( items_type_info_set, xml_album )
 
-         f = file_type_info( work_folder, i )
-
-         xml_item = create_xml_item( f ) 
-         set_xml_item_size( xml_item, f ) 
-
-         if f.size != None:
-            album_size = album_size + f.size
-
-         set_xml_item_audio_info( xml_item, f )
-
-         #xml_item = xml_doc.createTextNode( i )
-         xml_album.appendChild( xml_item )
-
-      for i in items_comm_set:
-         f = file_type_info( work_folder, i )
-
-         # to avoid xml parser engine error when a '--' is found in name
-         chars_to_remove=['-']
-         i_fixed = i.translate( None, ''.join(chars_to_remove) )
-         
-         str_comm = " <item src=\"" + i_fixed + "\" size=\"" + str(f.size) + "Kb\" /> " 
-
-         # Notify the user in some way which files have removed chars
-         str_mark = ""
-         if i_fixed != i:
-            str_mark = " *** " 
-
-         log_item( str_mark + i, True )
-
-         xml_item_comm = xml_doc.createComment( str_mark + i ) 
-         xml_album.appendChild( xml_item_comm )
-
-
-      set_xml_album_size( xml_album, album_size );
-
+      set_xml_album_size( xml_album, album_size )
 
 
    # iterate over the rest of subfolders
@@ -202,6 +149,99 @@ def traverse_folder( subfolder):
       traverse_folder( ss  )
 
 
+
+
+
+#
+# Populates found items ( valid music files, and those to be commented )
+#
+# @children_folders
+# @items_info_type_set      : returns a set with items
+#
+def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
+
+   print( "subfolder : " + subfolder )
+   work_folder = opt.source_root_path + "/" + subfolder
+
+   # Here store subfolders, items and commented_items
+   try:
+      for ss in os.listdir(work_folder):
+
+         if os.path.isdir( work_folder + "/" + ss ):
+            #print("dir entry   : " + ss )
+            children_folders.add( subfolder + ss )
+
+         for t in file_types:
+            if fnmatch.fnmatch( ss, "*." + t ): #opt.file_type ):
+               items_info_type_set.add( item_type_info( work_folder, ss ) )
+               break
+
+         for t in file_types_comm:
+            if fnmatch.fnmatch( ss, "*." + t ):
+               items_info_type_set.add( item_type_info( work_folder, ss, True ) )
+               break
+
+   except OSError as e:
+      log_error( "Error iterating over: " + work_folder + "\nException:\n" + repr(e) )
+      return
+
+
+
+
+#
+#
+#
+def process_album_items( items_info_type_set, xml_album ):
+   
+   album_size = 0
+
+   for i in items_info_type_set:
+      #print(   "- adding: " + i ); 
+
+      f = file_type_info( i.work_folder, i.item )
+
+      if i.is_comment:
+         process_album_commented_item( item_type_info( i.work_folder, i.item, True ), xml_album )
+         continue
+
+      xml_item = create_xml_item( f ) 
+      set_xml_item_size( xml_item, f ) 
+
+      if f.size != None:
+         album_size = album_size + f.size
+
+      set_xml_item_audio_info( xml_item, f )
+
+      #xml_item = xml_doc.createTextNode( i )
+      xml_album.appendChild( xml_item )
+
+
+   return album_size
+
+
+
+#
+#
+#
+def process_album_commented_item( i, xml_album ):
+
+   f = file_type_info( i.work_folder, i.item )
+
+   # to avoid xml parser engine error when a '--' is found in name
+   chars_to_remove=['-']
+   i_fixed = i.item.translate( None, ''.join(chars_to_remove) )
+   
+   str_comm = " <item src=\"" + i_fixed + "\" size=\"" + str(f.size) + "Kb\" /> " 
+
+   # Notify the user in some way which files have removed chars
+   str_mark = ""
+   if i_fixed != i.item:
+      str_mark = " *** " 
+
+   log_item( str_mark + i_fixed, True )
+
+   xml_item_comm = xml_doc.createComment( str_mark + str_comm ) 
+   xml_album.appendChild( xml_item_comm )
 
 
 
@@ -285,6 +325,10 @@ def log_item( item, is_commented=False ):
 
 def log_album( album ):
    log( "- add album: " + album )
+
+
+def log_error( msg ):
+   log( "*** " + msg )
 
 
 
