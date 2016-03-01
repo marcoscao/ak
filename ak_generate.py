@@ -333,6 +333,33 @@ def log_error( msg ):
 
 
 
+#
+# Saves and unlink xml
+#
+def save_xml():
+
+   if not os.path.exists(opt.output_path):
+      log( "Creating folder: " + opt.output_path )
+      os.makedirs(opt.output_path)
+
+   full_filename = opt.output_path + "/" + opt.section_id + ".xml"
+   #xml_doc.writexml( open( opt.output_path + "/" + opt.section_id + ".xml",'w'), indent="  ", addindent="  ", newl='\n' )
+   if os.path.isfile( full_filename ):
+      resp = raw_input( "\nFile: " + full_filename + " exists. \ndo you want to overwrite it (y/N) ?" )
+      if resp!="y" and resp!="Y":
+         log( "\nOperation canceled by the user" )
+         return
+      
+
+   f = open( full_filename, 'w' )
+   xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
+
+   log( "\nInformation saved to XML file: " + full_filename )
+
+   # last unlink xml
+   xml_doc.unlink()
+
+
 
 
 
@@ -391,13 +418,9 @@ xml_section.setAttribute( "id", opt.section_id )
 xml_section.setAttribute( "source", opt.source_root_path )
 xml_root.appendChild(xml_section)
 
+
 traverse_folder( "" )
 
-
-if not os.path.exists(opt.output_path):
-   os.makedirs(opt.output_path)
-
-xml_doc.writexml( open( opt.output_path + "/" + opt.section_id + ".xml",'w'), indent="  ", addindent="  ", newl='\n' )
-xml_doc.unlink()
+save_xml()
 
 
