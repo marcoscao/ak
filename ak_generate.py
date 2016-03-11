@@ -3,6 +3,7 @@ import os
 import sys
 import optparse
 import subprocess
+import time
 import fnmatch
 import mutagen
 from xml.dom.minidom import *
@@ -27,6 +28,7 @@ class file_type_info:
       #self.size = self._get_file_size( self.full_path )
 
       self._determine_size()
+      self._determine_dates()
       self._determine_audio_type()
 
 
@@ -36,6 +38,16 @@ class file_type_info:
       self.size = self._get_file_size( self.full_path )
       if self.size == None:
          self.size_error_status = "Error geting size"
+
+   #
+   #
+   def _determine_dates(self):
+      #self.date_created = time.strftime( "%Y-%b-%d %H:%M", time.localtime( self._get_file_date( self.full_path, "c" ) ) )
+      self.date_modified_localtime = time.localtime( self._get_file_date( self.full_path, "m" ) )
+      self.date_modified = time.strftime( "%Y-%m-%d", self.date_modified_localtime ) #time.localtime( self._get_file_date( self.full_path, "m" ) ) )
+
+      if self.date_modified == None:
+         self.date_error_status = "Error geting file dates"
 
    #
    #
@@ -55,6 +67,10 @@ class file_type_info:
                self.audio_type = FLAC( self.full_path )
             except:
                self.audio_error = "Error getting FLAC info"
+      elif self.ext == ".m3u":
+         self.audio_error = ""
+      elif self.ext == ".cue":
+         self.audio_error = ""
       else:
          self.audio_error = "Error!! Unknow audio format"
 
@@ -82,6 +98,30 @@ class file_type_info:
 
       finally:
          return f_size
+
+
+   #
+   # Retrieves file date
+   # @date_type specifies which date type
+   #     "c"   -> means creation date
+   #     "m"   -> means modified date
+   #
+   def _get_file_date( self, f_full, date_type ):
+      f_date = None
+      
+      try:
+
+         if date_type == "c":
+            f_date = os.path.getctime(f_full)
+         elif date_type == "m":
+            f_date = os.path.getmtime(f_full)
+
+      except:
+         #print("Something wrong getting creation date of: " + f_full )
+         raise
+
+      finally:
+         return f_date
 
 
    #
@@ -163,13 +203,23 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
    print( "subfolder : " + subfolder )
    work_folder = opt.source_root_path + "/" + subfolder
 
+   since_date_localtime = time.strptime( opt.since_date, "%Y-%m-%d" );
+   #print "----------- since_date_localtime: " + str( since_date_localtime )
+
    # Here store subfolders, items and commented_items
    try:
       for ss in os.listdir(work_folder):
 
-         if os.path.isdir( work_folder + "/" + ss ):
+         f_full = work_folder + "/" + ss
+         
+         if os.path.isdir( f_full ): #work_folder + "/" + ss ):
             #print("dir entry   : " + ss )
             children_folders.add( subfolder + ss )
+
+         if time.localtime( os.path.getmtime( f_full ) ) < since_date_localtime:
+            #print "* omitted item : " + ss + "  --  date " + \
+             #        time.strftime("%Y-%m-%d",time.localtime(os.path.getmtime(f_full))) + " previous to " + opt.since_date
+            continue
 
          for t in file_types:
             if fnmatch.fnmatch( ss, "*." + t ): #opt.file_type ):
@@ -206,6 +256,7 @@ def process_album_items( items_info_type_set, xml_album ):
 
       xml_item = create_xml_item( f ) 
       set_xml_item_size( xml_item, f ) 
+      set_xml_item_dates( xml_item, f ) 
 
       if f.size != None:
          album_size = album_size + f.size
@@ -261,14 +312,29 @@ def create_xml_item( f_object ):
 
 
 #
-# Retrieves size in kb from a full_path file
-# @return file size or 0 for aditional album size computations
+#
 #
 def set_xml_item_size( xml_item, f_type ):
    if f_type.size != None:
       xml_item.setAttribute( "size", str( f_type.size / 1024 ) + "Mb" )
    else:
       xml_item.setAttribute( "size_error", "error getting size" )
+
+
+#
+#
+#
+def set_xml_item_dates( xml_item, f_type ):
+   # if f_type.date_created != None:
+   #    xml_item.setAttribute( "created", f_type.date_created )
+   # else:
+   #    xml_item.setAttribute( "date_error", "error getting creation date" )
+
+   if f_type.date_modified != None:
+      xml_item.setAttribute( "modified_date", f_type.date_modified )
+   else:
+      xml_item.setAttribute( "date_error", "error getting modified date" )
+
 
 
 
@@ -284,6 +350,7 @@ def set_xml_item_audio_info( xml_item, f ):
    if isinstance( f.audio_type, MP3 ):
       try:
          xml_item.setAttribute("bpm", str(f.audio_type.info.bitrate / 1000 ) )
+         xml_item.setAttribute("length", time.strftime("%H:%M:%S", time.gmtime( f.audio_type.info.length ) ) )
          #xml_item.setAttribute("length", str(f_audio.info.length))
 
       except Exception as e:
@@ -294,10 +361,12 @@ def set_xml_item_audio_info( xml_item, f ):
    elif isinstance( f.audio_type, FLAC ):
       try:
          xml_item.setAttribute("sample_rate", str(f.audio_type.info.sample_rate) )
+         xml_item.setAttribute("length", time.strftime("%H:%M:%S", time.gmtime( f.audio_type.info.length ) ) )
 
       except Exception as e:
          print("** Error getting FLAC info: " + repr(e) )
          xml_item.setAttribute("sample_rate", "0")
+         xml_item.setAttribute("length", "0")
          xml_item.setAttribute("audio_error", "FLAC exception: " + repr(e) )
 
 #
@@ -354,7 +423,7 @@ def save_xml():
    f = open( full_filename, 'w' )
    xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
 
-   log( "\nInformation saved to XML file: " + full_filename )
+   log( "\nData saved to XML file: " + full_filename )
 
    # last unlink xml
    xml_doc.unlink()
@@ -386,6 +455,7 @@ p.add_option("-s", "--source_root_path", action="store", type="string", dest="so
 #p.add_option("-f", "--file_types", action="store", type="string", dest="file_type")
 p.add_option("-i", "--section_id", action="store", type="string", dest="section_id", help="optional section id. Default last source path" )
 p.add_option("-o", "--output_path", action="store", type="string", dest="output_path", default="output_data", help="optional output generated files path" )
+p.add_option("-d", "--since_date", action="store", type="string", dest="since_date", default="1900-01-01", help="optional, files since date yyyy-mm-dd" )
 
 # flac, mp3, dsf, ... or empty means everything
 #p.set_defaults( file_type="flac alac mp3 cue wav dsd dsf ogg" )
@@ -412,10 +482,14 @@ print("source root_path    : " + opt.source_root_path )
 print("output_path    : " + opt.output_path )
 #print("file types   : " + opt.file_types ) 
 print("section id : " + opt.section_id )
+print("since_date : " + opt.since_date )
+print ""
+
 
 xml_section = xml_doc.createElement("section")
 xml_section.setAttribute( "id", opt.section_id )
 xml_section.setAttribute( "source", opt.source_root_path )
+xml_section.setAttribute( "since_date", opt.since_date )
 xml_root.appendChild(xml_section)
 
 
