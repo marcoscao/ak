@@ -12,7 +12,6 @@ from mutagen.flac import FLAC
 #from xml.dom import minidom
 
 
-
 #
 # Encapsulates file meta info data to build each xml item node
 #
@@ -149,6 +148,105 @@ class item_type_info:
 
 
 
+#
+# Manages xml: creation, update, ...
+#
+class xml_manager:
+   
+   def __init__( self, work_folder, local_file ):
+      self.xml_doc = None
+
+
+   def create( self ):
+      if self.xml_doc != None:
+         log_error("Oops! can't create a non null xml document")
+         return
+
+      self.xml_doc = Document()
+      self.xml_root = xml_doc.createElement("root")
+      self.xml_doc.appendChild( xml_root )
+
+
+   #
+   # note that changes will be lost if no saved previously
+   #
+   def close( self ):
+      self.xml_doc.unlink();
+      self.xml_doc = None
+
+
+
+   def load_from_file( self, full_filename ):
+      if self.xml_doc != None:
+         log_error("can't not load from file an already open xml document")
+         return
+
+      self.xml_doc = parse( full_filename )
+
+
+
+   #
+   # Returns node or None if not found
+   #
+   def find_node( self, node_name ):
+      if self.xml_doc == None:
+         log_error("can't not find within no created/loaded xml document")
+         return
+
+      for node in self.xml_doc.getElementsByTagName( node_name ):
+         if node.tagName == node_name:
+            return node
+
+      return None
+
+
+
+   #
+   # Saves current data
+   #
+   def save( full_filename ):
+      if self.xml_doc == None:
+         log_error("can't not flush a non created/loaded xml document")
+         return
+         
+      f = open( full_filename, 'w' )
+      self.xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
+
+      log( "\nData saved to XML file: " + full_filename )
+
+
+   #
+   # Creates a xml node with 1 attrib if passed
+   # Returns created node
+   #
+   def create_node(self, node_name, attrib_id = None, attrib_value = None ):
+      if self.xml_doc == None:
+         log_error("can't not create node for a non created/loaded xml document")
+         return
+
+      xml_node = xml_doc.createElement( node_name )
+      
+      if attrib_id != None:
+         self.add_attribute( xml_node, attrib_id, attrib_value )
+
+      return xml_node
+
+
+
+
+   def add_attribute(self, xml_node, attrib_id, attrib_value ):
+      if xml_node == None:
+         log_error("can't not add attributes over a null xml node")
+         return
+   
+      xml_node.setAttribute( attrib_id, attrib_value )
+
+
+
+
+
+
+
 
 #
 # Iterating over directory tree
@@ -159,35 +257,53 @@ def traverse_folder( subfolder):
    if subfolder!="":
       subfolder = subfolder + "/"
 
+   global total_saved_albums
+   global total_saved_albums_size
+
    work_folder = opt.source_root_path + "/" + subfolder
    #for path_name, dirs, files in os.walk( root_folder ):
 
    children_folders = set()
    items_type_info_set = set()
 
-   # get items from subfolder
-   process_subfolder_data( subfolder, children_folders, items_type_info_set )
+   try:
+      # get items from subfolder
+      process_subfolder_data( subfolder, children_folders, items_type_info_set )
 
-   # if folder_has_file_types or commented ones create the album:
-   if items_type_info_set:
+      # by default do not create albums where all items are comments
+      all_comments = True
+      for i in items_type_info_set:
+         if i.is_comment != True:
+            all_comments = False
+            break
 
-      xml_album = xml_doc.createElement( "album" )
-      xml_album.setAttribute("src", subfolder )
-      xml_section.appendChild( xml_album )
+      if all_comments != True:
+         if items_type_info_set:
 
-      album_size=0
-      log_album( subfolder )
+            xml_album = xml_doc.createElement( "album" )
+            xml_album.setAttribute("src", subfolder )
+            xml_section.appendChild( xml_album )
 
-      # process songs
-      album_size = process_album_items( items_type_info_set, xml_album )
+            album_size=0
+            log_album( subfolder )
 
-      set_xml_album_size( xml_album, album_size )
+            # process songs
+            album_size = process_album_items( items_type_info_set, xml_album )
+
+            set_xml_album_size( xml_album, album_size )
+
+            total_saved_albums = total_saved_albums + 1
+            total_saved_albums_size = total_saved_albums_size + album_size
 
 
-   # iterate over the rest of subfolders
-   for ss in children_folders:
-      traverse_folder( ss  )
 
+      # iterate over the rest of subfolders
+      for ss in children_folders:
+         traverse_folder( ss  )
+
+   except Exception as e:
+      log_error("Something wrong in traverse_folder.\nException: \n" + repr(e) )
+      raise
 
 
 
@@ -200,11 +316,12 @@ def traverse_folder( subfolder):
 #
 def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
 
-   print( "subfolder : " + subfolder )
    work_folder = opt.source_root_path + "/" + subfolder
 
    since_date_localtime = time.strptime( opt.since_date, "%Y-%m-%d" );
    #print "----------- since_date_localtime: " + str( since_date_localtime )
+
+   log( "processing: " + subfolder + "..." )
 
    # Here store subfolders, items and commented_items
    try:
@@ -221,20 +338,23 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
              #        time.strftime("%Y-%m-%d",time.localtime(os.path.getmtime(f_full))) + " previous to " + opt.since_date
             continue
 
-         for t in file_types:
+         for t in supported_audio_file_types:
             if fnmatch.fnmatch( ss, "*." + t ): #opt.file_type ):
                items_info_type_set.add( item_type_info( work_folder, ss ) )
                break
 
-         for t in file_types_comm:
+         for t in supported_comment_file_types:
             if fnmatch.fnmatch( ss, "*." + t ):
                items_info_type_set.add( item_type_info( work_folder, ss, True ) )
                break
 
    except OSError as e:
       log_error( "Error iterating over: " + work_folder + "\nException:\n" + repr(e) )
-      return
+      raise
 
+   except Exception as e:
+      log_error("Unknow exception when iterating over: " + work_folder + "\nException:\n" + repr(e) )
+      raise
 
 
 
@@ -344,7 +464,11 @@ def set_xml_item_dates( xml_item, f_type ):
 def set_xml_item_audio_info( xml_item, f ):
 
    if f.audio_type == None:
-      xml_item.setAttribute( "audio_error", f.audio_error )
+      
+      # because m3u, cue, ... are valid "music" files to be copied but don't have audio info, so, no error because is not an error
+      if f.audio_error != "":
+         xml_item.setAttribute( "audio_error", f.audio_error )
+      
       return
 
    if isinstance( f.audio_type, MP3 ):
@@ -378,6 +502,7 @@ def set_xml_album_size( xml_album, album_size ):
 
 
 
+
 #
 #
 #
@@ -402,34 +527,55 @@ def log_error( msg ):
 
 
 
+
 #
 # Saves and unlink xml
+# also updates tag <section> with total albums and total albums size
 #
-def save_xml():
 
-   if not os.path.exists(opt.output_path):
-      log( "Creating folder: " + opt.output_path )
-      os.makedirs(opt.output_path)
-
-   full_filename = opt.output_path + "/" + opt.section_id + ".xml"
-   #xml_doc.writexml( open( opt.output_path + "/" + opt.section_id + ".xml",'w'), indent="  ", addindent="  ", newl='\n' )
-   if os.path.isfile( full_filename ):
-      resp = raw_input( "\nFile: " + full_filename + " exists. \ndo you want to overwrite it (y/N) ?" )
-      if resp!="y" and resp!="Y":
-         log( "\nOperation canceled by the user" )
-         return
-      
+def save_xml( full_filename ):
+   
+   xml_section.setAttribute( "total_albums", str(total_saved_albums) )
+   xml_section.setAttribute( "total_albums_size", str(total_saved_albums_size) + " Mb" )
 
    f = open( full_filename, 'w' )
    xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
 
-   log( "\nData saved to XML file: " + full_filename )
+   log( "\n. total saved albums: " + str(total_saved_albums) )
+   log( ". total saved albums size: " + str(total_saved_albums_size) + " Mb ( " + str(total_saved_albums_size/1024/1024) + " Gb )" )
+   log( "\nData have been saved to the XML file: " + full_filename )
 
    # last unlink xml
    xml_doc.unlink()
 
 
 
+
+
+
+#
+# settings info
+#
+def show_settings_info( title, request_user_confirm = False ):
+   log("")
+   log( title )
+   log("  - source root_path : " + opt.source_root_path )
+   log("  - output file      : " + full_output_filename )
+   log("  - section id       : " + opt.section_id )
+   log("  - since date       : " + opt.since_date )
+   log("  - supported audio file types   : " + str(supported_audio_file_types) ) 
+   log("  - supported comment file types : " + str(supported_comment_file_types)) 
+   log("")
+   log("  Notes:")
+   log("  * folders/albums with all its files as comments will not be added by default" )
+   log("  * commented file with characters '-' in its name will be marked with '***' and replaced with ' '")
+   log("")
+
+   if request_user_confirm:
+      resp = raw_input( "\nContinue with this settings (Y/n) ?" )
+      if resp=="n" or resp=="N":
+         log( "\nOperation canceled by the user" )
+         exit(0)
 
 
 
@@ -445,21 +591,17 @@ xml_root = xml_doc.createElement("root")
 xml_doc.appendChild( xml_root )
 
 
-file_types=['flac','dsd','cue','mp3','m3u','m4a','aac','alac','wav']
-file_types_comm = ['jpg', 'png', 'gif']
+supported_audio_file_types=['flac','dsd','cue','mp3','m3u','m4a','aac','alac','wav']
+supported_comment_file_types = ['jpg', 'png', 'gif']
 
 p = optparse.OptionParser()
 
 p.add_option("-s", "--source_root_path", action="store", type="string", dest="source_root_path", \
                                        help="source path to start search" )
-#p.add_option("-f", "--file_types", action="store", type="string", dest="file_type")
 p.add_option("-i", "--section_id", action="store", type="string", dest="section_id", help="optional section id. Default last source path" )
 p.add_option("-o", "--output_path", action="store", type="string", dest="output_path", default="output_data", help="optional output generated files path" )
 p.add_option("-d", "--since_date", action="store", type="string", dest="since_date", default="1900-01-01", help="optional, files since date yyyy-mm-dd" )
-
-# flac, mp3, dsf, ... or empty means everything
-#p.set_defaults( file_type="flac alac mp3 cue wav dsd dsf ogg" )
-#p.set_defaults( section_id="" )
+p.add_option("-t", "--target_file", action="store", type="string", dest="target_file", default=None, help="optional alternative target file name" )
 
 opt,args = p.parse_args()
 
@@ -476,25 +618,77 @@ if opt.section_id == None:
    # remove first '/'
    #opt.section_id = opt.section_id[:0] + opt.section_id[1:]
 
-
-print("")
-print("source root_path    : " + opt.source_root_path )
-print("output_path    : " + opt.output_path )
-#print("file types   : " + opt.file_types ) 
-print("section id : " + opt.section_id )
-print("since_date : " + opt.since_date )
-print ""
+if opt.target_file == None:
+   opt.target_file = opt.section_id + ".xml"
 
 
+full_output_filename = opt.output_path + "/" + opt.target_file
+
+
+
+#
+# show settings values and asks to continue
+#
+show_settings_info( "ak_generate current settings values:\n", True )
+
+
+
+
+#
+# create target folder
+#
+if not os.path.exists(opt.output_path):
+   log( "Creating folder: " + opt.output_path )
+   os.makedirs(opt.output_path)
+
+
+
+#
+# checks whether output file exists
+#
+#full_output_filename = opt.output_path + "/" + opt.section_id + ".xml"
+
+if os.path.isfile( full_output_filename ):
+   resp = raw_input( "\nFile: " + full_output_filename + " exists. \ndo you want to be overwrited it in case no error (y/N) ?" )
+   if resp!="y" and resp!="Y":
+      log( "\nOperation canceled by the user" )
+      exit(0)
+
+
+#
+# create xml header <section> info
+#
 xml_section = xml_doc.createElement("section")
 xml_section.setAttribute( "id", opt.section_id )
 xml_section.setAttribute( "source", opt.source_root_path )
 xml_section.setAttribute( "since_date", opt.since_date )
+
 xml_root.appendChild(xml_section)
 
 
+
+
+#
+# start main operation
+#
+total_saved_albums = 0
+total_saved_albums_size = 0
+
 traverse_folder( "" )
 
-save_xml()
+
+
+
+#
+#
+show_settings_info("used settings:")
+
+
+#
+# 
+#
+save_xml( full_output_filename )
+
+
 
 
