@@ -436,7 +436,7 @@ def create_xml_item( f_object ):
 #
 def set_xml_item_size( xml_item, f_type ):
    if f_type.size != None:
-      xml_item.setAttribute( "size", str( f_type.size / 1024 ) + "Mb" )
+      xml_item.setAttribute( "size", "{0:.1f}".format( f_type.size / 1024.0 ) + " Mb" )
    else:
       xml_item.setAttribute( "size_error", "error getting size" )
 
@@ -497,7 +497,7 @@ def set_xml_item_audio_info( xml_item, f ):
 #
 #
 def set_xml_album_size( xml_album, album_size ):
-   xml_album.setAttribute("size", str( album_size / 1024 ) + "Mb" )
+   xml_album.setAttribute("size", "{0:.2f}".format( album_size / 1024.0 ) + " Mb" )
 
 
 
@@ -535,14 +535,17 @@ def log_error( msg ):
 
 def save_xml( full_filename ):
    
+   tot_sz_gb = "{0:.4f}".format( total_saved_albums_size / 1024.0 / 1024.0 ) + " Gb"
+
+   log( "\n. total saved albums: " + str(total_saved_albums) )
+   log( ". total saved albums size: " + tot_sz_gb + "  ( " + str(total_saved_albums_size) + " Mb )"  )
+
    xml_section.setAttribute( "total_albums", str(total_saved_albums) )
-   xml_section.setAttribute( "total_albums_size", str(total_saved_albums_size) + " Mb" )
+   xml_section.setAttribute( "total_albums_size", tot_sz_gb )
 
    f = open( full_filename, 'w' )
    xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
 
-   log( "\n. total saved albums: " + str(total_saved_albums) )
-   log( ". total saved albums size: " + str(total_saved_albums_size) + " Mb ( " + str(total_saved_albums_size/1024/1024) + " Gb )" )
    log( "\nData have been saved to the XML file: " + full_filename )
 
    # last unlink xml
