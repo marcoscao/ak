@@ -2,6 +2,7 @@ import os
 import sys
 import optparse
 import subprocess
+from codecs import open
 from xml.dom import minidom
 
 
@@ -48,11 +49,14 @@ def show_item_info( item_node, n_count, n_total, tot_size_kb ):
 
 
 def make_target_path( target_path ):
-   err = os.system('mkdir -p \"' + target_path + '\"');
-   if err != 0:
-      print("Ops! error creating target path: " + target_path)
-   else:
+
+   try:
+      subprocess.check_call( [ "mkdir", "-p", target_path ] )
+      #err = os.system('mkdir -p \"' + target_path + '\"');
       print("Created path: " + target_path)
+   except Exception as e:
+      print("Ops! error creating target path: " + target_path)
+      print ("Exception:\n" + repr(e) )
 
 
 def copy_file( source_path, target_path, f ): 
@@ -70,12 +74,28 @@ def copy_file( source_path, target_path, f ):
       return False
 
    if os.path.exists( target_path + f ):
-      print("warning!! file not copied because it exists on target folder")
+      #print("warning!! file not copied because it exists on target folder")
       return False
 
-   err=os.system("cp -n " + source_path_with_f + " \"" + target_path + "\"" )
-   if (err != 0) and (err != 1):
+   try:
+      #print "--->>>>1111 " + source_path_with_f
+      #print "--->>>>2222 " + target_path
+      #process = subprocess.Popen("pwd", shell=True, stdout=subprocess.PIPE)
+      #stdout = process.communicate()[0]
+      #print '............. STDOUT:{}'.format(stdout)
+      sys.stdout.write("copying...........")
+      sys.stdout.flush()
+      subprocess.check_call( "cp " + source_path_with_f + " \"" + target_path + "\"", shell = True )
+      sys.stdout.write("Ok\n")
+
+   except subprocess.CalledProcessError as e:
+      #if (err != 0) and (err != 1):
       print("ERROR!!!! something wrong copying file" )
+
+      print ("Exception:\n" + repr(e) )
+      print (" cmd:" + str(e.cmd) )
+      print (" returncode: " + str(e.returncode) )
+      print (" output: " + str(e.output) )
       return False
 
    return True
@@ -91,9 +111,9 @@ def process_xml_items( section_node, album_node ):
       
    tgt_cpy = None
    if opt.target_path != None:
-      tgt_cpy = opt.target_path + "/" + album_node.attributes['src'].value 
+      tgt_cpy = opt.target_path + "/" + section_node.attributes['id'].value + "/" + album_node.attributes['src'].value 
    
-   src_cpy = src_folder + "/" 
+   src_cpy = src_folder #+ "/" 
    
    # 
    # only create folders if target_path argument was passed
@@ -112,7 +132,8 @@ def process_xml_items( section_node, album_node ):
       err_size = False
 
       try:
-         src_item = src_folder + "/" + item_node.attributes['src'].value 
+         src_item = src_folder + item_node.attributes['src'].value 
+         #print "--->>>> " + src_item
          # size in kb
          item_size = os.path.getsize( src_item ) / 1024.0
       except:
