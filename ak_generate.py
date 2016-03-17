@@ -1,3 +1,4 @@
+import core.utils
 import ntpath
 import os
 import sys
@@ -159,7 +160,7 @@ class xml_manager:
 
    def create( self ):
       if self.xml_doc != None:
-         log_error("Oops! can't create a non null xml document")
+         core.utils.log_error("Oops! can't create a non null xml document")
          return
 
       self.xml_doc = Document()
@@ -178,7 +179,7 @@ class xml_manager:
 
    def load_from_file( self, full_filename ):
       if self.xml_doc != None:
-         log_error("can't not load from file an already open xml document")
+         core.utils.log_error("can't not load from file an already open xml document")
          return
 
       self.xml_doc = parse( full_filename )
@@ -190,7 +191,7 @@ class xml_manager:
    #
    def find_node( self, node_name ):
       if self.xml_doc == None:
-         log_error("can't not find within no created/loaded xml document")
+         core.utils.log_error("can't not find within no created/loaded xml document")
          return
 
       for node in self.xml_doc.getElementsByTagName( node_name ):
@@ -206,13 +207,13 @@ class xml_manager:
    #
    def save( full_filename ):
       if self.xml_doc == None:
-         log_error("can't not flush a non created/loaded xml document")
+         core.utils.log_error("can't not flush a non created/loaded xml document")
          return
          
       f = open( full_filename, 'w' )
       self.xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
 
-      log( "\nData saved to XML file: " + full_filename )
+      core.utils.log( "\nData saved to XML file: " + full_filename )
 
 
    #
@@ -221,7 +222,7 @@ class xml_manager:
    #
    def create_node(self, node_name, attrib_id = None, attrib_value = None ):
       if self.xml_doc == None:
-         log_error("can't not create node for a non created/loaded xml document")
+         core.utils.log_error("can't not create node for a non created/loaded xml document")
          return
 
       xml_node = xml_doc.createElement( node_name )
@@ -236,7 +237,7 @@ class xml_manager:
 
    def add_attribute(self, xml_node, attrib_id, attrib_value ):
       if xml_node == None:
-         log_error("can't not add attributes over a null xml node")
+         core.utils.log_error("can't not add attributes over a null xml node")
          return
    
       xml_node.setAttribute( attrib_id, attrib_value )
@@ -280,17 +281,19 @@ def traverse_folder( subfolder):
       if all_comments != True:
          if items_type_info_set:
 
+            #if opt.dry_run == False:
             xml_album = xml_doc.createElement( "album" )
             xml_album.setAttribute("src", subfolder )
             xml_section.appendChild( xml_album )
 
             album_size=0
-            log_album( subfolder )
+            core.utils.log_album( subfolder )
 
             # process songs
             album_size = process_album_items( items_type_info_set, xml_album )
 
-            set_xml_album_size( xml_album, album_size )
+            if opt.dry_run == False:
+               set_xml_album_size( xml_album, album_size )
 
             total_saved_albums = total_saved_albums + 1
             total_saved_albums_size = total_saved_albums_size + album_size
@@ -302,7 +305,7 @@ def traverse_folder( subfolder):
          traverse_folder( ss  )
 
    except Exception as e:
-      log_error("Something wrong in traverse_folder.\nException: \n" + repr(e) )
+      core.utils.log_error("Something wrong in traverse_folder.\nException: \n" + repr(e) )
       raise
 
 
@@ -321,7 +324,7 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
    since_date_localtime = time.strptime( opt.since_date, "%Y-%m-%d" );
    #print "----------- since_date_localtime: " + str( since_date_localtime )
 
-   log( "processing: " + subfolder + "..." )
+   core.utils.log( "processing: " + subfolder + "...", opt.verbose_mode )
 
    # Here store subfolders, items and commented_items
    try:
@@ -349,11 +352,11 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
                break
 
    except OSError as e:
-      log_error( "Error iterating over: " + work_folder + "\nException:\n" + repr(e) )
+      core.utils.log_error( "Error iterating over: " + work_folder + "\nException:\n" + repr(e) )
       raise
 
    except Exception as e:
-      log_error("Unknow exception when iterating over: " + work_folder + "\nException:\n" + repr(e) )
+      core.utils.log_error("Unknow exception when iterating over: " + work_folder + "\nException:\n" + repr(e) )
       raise
 
 
@@ -364,27 +367,31 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
 def process_album_items( items_info_type_set, xml_album ):
    
    album_size = 0
+   global g_total_processed_items
 
    for i in items_info_type_set:
       #print(   "- adding: " + i ); 
+      g_total_processed_items = g_total_processed_items + 1
 
       f = file_type_info( i.work_folder, i.item )
-
+      
       if i.is_comment:
          process_album_commented_item( item_type_info( i.work_folder, i.item, True ), xml_album )
          continue
 
-      xml_item = create_xml_item( f ) 
-      set_xml_item_size( xml_item, f ) 
-      set_xml_item_dates( xml_item, f ) 
+      if opt.dry_run == False:
+         xml_item = create_xml_item( f ) 
+         set_xml_item_size( xml_item, f ) 
+         set_xml_item_dates( xml_item, f ) 
 
       if f.size != None:
          album_size = album_size + f.size
 
-      set_xml_item_audio_info( xml_item, f )
+      if opt.dry_run == False:
+         set_xml_item_audio_info( xml_item, f )
 
-      #xml_item = xml_doc.createTextNode( i )
-      xml_album.appendChild( xml_item )
+         #xml_item = xml_doc.createTextNode( i )
+         xml_album.appendChild( xml_item )
 
 
    return album_size
@@ -409,7 +416,10 @@ def process_album_commented_item( i, xml_album ):
    if i_fixed != i.item:
       str_mark = " *** " 
 
-   log_item( str_mark + i_fixed, True )
+   core.utils.log_item( str_mark + i_fixed, True, opt.verbose_mode )
+
+   if opt.dry_run:
+      return
 
    xml_item_comm = xml_doc.createComment( str_mark + str_comm ) 
    xml_album.appendChild( xml_item_comm )
@@ -422,7 +432,7 @@ def process_album_commented_item( i, xml_album ):
 def create_xml_item( f_object ):
 
    #print(   "  - add item: " + f_object.local_file );
-   log_item( f_object.local_file );
+   core.utils.log_item( f_object.local_file, False, opt.verbose_mode );
 
    xml_item = xml_doc.createElement( "item" )
    xml_item.setAttribute( "src", f_object.local_file )
@@ -506,23 +516,23 @@ def set_xml_album_size( xml_album, album_size ):
 #
 #
 #
-def log( msg ):
-   print( msg )
-
-
-def log_item( item, is_commented=False ):
-   if is_commented:
-      log( "  - add COMMENTED item: " + item )
-   else:
-      log( "  - add item: " + item )
-
-
-def log_album( album ):
-   log( "- add album: " + album )
-
-
-def log_error( msg ):
-   log( "*** " + msg )
+# def log( msg ):
+#    print( msg )
+#
+#
+# def log_item( item, is_commented=False ):
+#    if is_commented:
+#       log( "  - add COMMENTED item: " + item )
+#    else:
+#       log( "  - add item: " + item )
+#
+#
+# def log_album( album ):
+#    log( "- add album: " + album )
+#
+#
+# def log_error( msg ):
+#    log( "*** " + msg )
 
 
 
@@ -535,18 +545,23 @@ def log_error( msg ):
 
 def save_xml( full_filename ):
    
-   tot_sz_gb = "{0:.4f}".format( total_saved_albums_size / 1024.0 / 1024.0 ) + " Gb"
+   tot_sz_gb = "{0:.2f}".format( total_saved_albums_size / 1024.0 / 1024.0 ) + " Gb"
 
-   log( "\n. total saved albums: " + str(total_saved_albums) )
-   log( ". total saved albums size: " + tot_sz_gb + "  ( " + str(total_saved_albums_size) + " Mb )"  )
+   core.utils.log( "\n. total albums: " + str(total_saved_albums) )
+   core.utils.log( ". total items: " + str(g_total_processed_items) )
+   core.utils.log( ". total albums size: " + tot_sz_gb + "  ( " + str(total_saved_albums_size) + " Mb )"  )
+
+   if opt.dry_run:
+      return
 
    xml_section.setAttribute( "total_albums", str(total_saved_albums) )
    xml_section.setAttribute( "total_albums_size", tot_sz_gb )
+   xml_section.setAttribute( "total_items", str(g_total_processed_items) )
 
    f = open( full_filename, 'w' )
    xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
 
-   log( "\nData have been saved to the XML file: " + full_filename )
+   core.utils.log( "\nData have been saved to the XML file: " + full_filename )
 
    # last unlink xml
    xml_doc.unlink()
@@ -560,24 +575,25 @@ def save_xml( full_filename ):
 # settings info
 #
 def show_settings_info( title, request_user_confirm = False ):
-   log("")
-   log( title )
-   log("  - source root_path : " + opt.source_root_path )
-   log("  - output file      : " + full_output_filename )
-   log("  - section id       : " + opt.section_id )
-   log("  - since date       : " + opt.since_date )
-   log("  - supported audio file types   : " + str(supported_audio_file_types) ) 
-   log("  - supported comment file types : " + str(supported_comment_file_types)) 
-   log("")
-   log("  Notes:")
-   log("  * folders/albums with all its files as comments will not be added by default" )
-   log("  * commented file with characters '-' in its name will be marked with '***' and replaced with ' '")
-   log("")
+   core.utils.log("")
+   core.utils.log( title )
+   core.utils.log("  - source root_path : " + opt.source_root_path )
+   core.utils.log("  - output file      : " + full_output_filename )
+   core.utils.log("  - section id       : " + opt.section_id )
+   core.utils.log("  - since date       : " + opt.since_date )
+   core.utils.log("  - supported audio file types   : " + str(supported_audio_file_types) ) 
+   core.utils.log("  - supported comment file types : " + str(supported_comment_file_types)) 
+   core.utils.log("  - dry_run mode : " + str(opt.dry_run)) 
+   core.utils.log("")
+   core.utils.log("  Notes:")
+   core.utils.log("  * folders/albums with all its files as comments will not be added by default" )
+   core.utils.log("  * commented file with characters '-' in its name will be marked with '***' and replaced with ' '")
+   core.utils.log("")
 
    if request_user_confirm:
       resp = raw_input( "\nContinue with this settings (Y/n) ?" )
       if resp=="n" or resp=="N":
-         log( "\nOperation canceled by the user" )
+         core.utils.log( "\nOperation canceled by the user" )
          exit(0)
 
 
@@ -605,12 +621,24 @@ p.add_option("-i", "--section_id", action="store", type="string", dest="section_
 p.add_option("-o", "--output_path", action="store", type="string", dest="output_path", default="output_data", help="optional output generated files path" )
 p.add_option("-d", "--since_date", action="store", type="string", dest="since_date", default="1900-01-01", help="optional, files since date yyyy-mm-dd" )
 p.add_option("-t", "--target_file", action="store", type="string", dest="target_file", default=None, help="optional alternative target file name" )
+p.add_option("-n", "--no_verbose", action="store_true", dest="verbose_mode", help="no verbose mode" )
+p.add_option("-u", "--dry_run", action="store_true", dest="dry_run", help="dry_run mode" )
 
 opt,args = p.parse_args()
 
 if opt.source_root_path == None:
    print("Plese enter SOURCE_ROOT_PATH folder. Use -h to show currently available options" )
    sys.exit(1)
+
+if opt.verbose_mode == None:
+   opt.verbose_mode = True
+else:
+   opt.verbose_mode = False
+
+if opt.dry_run == None:
+   opt.dry_run = False
+else:
+   opt.dry_run = True
 
 if opt.source_root_path.endswith('/'):
    opt.source_root_path = opt.source_root_path[:-1]
@@ -641,7 +669,7 @@ show_settings_info( "ak_generate current settings values:\n", True )
 # create target folder
 #
 if not os.path.exists(opt.output_path):
-   log( "Creating folder: " + opt.output_path )
+   core.utils.log( "Creating folder: " + opt.output_path )
    os.makedirs(opt.output_path)
 
 
@@ -651,10 +679,10 @@ if not os.path.exists(opt.output_path):
 #
 #full_output_filename = opt.output_path + "/" + opt.section_id + ".xml"
 
-if os.path.isfile( full_output_filename ):
-   resp = raw_input( "\nFile: " + full_output_filename + " exists. \ndo you want to be overwrited it in case no error (y/N) ?" )
+if opt.dry_run == False and os.path.isfile( full_output_filename ):
+   resp = raw_input( "\nFile: " + full_output_filename + " exists. \ndo you want to be overwritted (y/N) ?" )
    if resp!="y" and resp!="Y":
-      log( "\nOperation canceled by the user" )
+      core.utils.log( "\nOperation canceled by the user" )
       exit(0)
 
 
@@ -675,6 +703,7 @@ xml_root.appendChild(xml_section)
 # start main operation
 #
 total_saved_albums = 0
+g_total_processed_items = 0
 total_saved_albums_size = 0
 
 traverse_folder( "" )
