@@ -3,13 +3,18 @@ TODO:
 
 ak_generate:
   - dump to xml every "chunk number" of albums
+  - let user stop/cancel operation, saving until last or current complete album
+  - update support
+  - list failed items
+  - make use of xml_manager
+  - continue refactoring
+  - log to file
 
 
 ak_sync:
   - sync_del removing from target those items not found in source xml
   - sync_upd copy new items found in the xml into target
-  - identify failed source items names ( not found, error reading... )
-  - identify failed target items names ( not copied maybe due to space or not mounted, ... )
+  - save failed source and target items names to a file ( not found, error reading, not copied due to not enough space or not mounted, ... )
 
 
 ak_query:
@@ -21,13 +26,16 @@ ak_query:
    - comment, uncomment songs, albums, ...
 
 
-
 core/utils:
    - also save log to file
+   - conver log methods into a class
+   - add SQLite support
+   - make xml_manager usage
+   - rename core to akc?
 
 
 general:
-   - move xml management to core/xml
-
+   - move xml_management to a standalone core/xml
+   
 
 
