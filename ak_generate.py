@@ -1,3 +1,6 @@
+from core.utils import FileManager
+from core.utils import Log
+
 import core.utils  
 import ntpath
 import os
@@ -10,7 +13,6 @@ import mutagen
 from xml.dom.minidom import *
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
-#from xml.dom import minidom
 
 
 #
@@ -22,10 +24,10 @@ class file_type_info:
       
       self.work_folder = work_folder
       self.local_file = local_file
-      self.full_path = self._get_full_path( self.work_folder, self.local_file )
+      self.full_path = FileManager.full_path( self.work_folder, self.local_file )
 
-      self.name, self.ext = os.path.splitext( self.full_path )
-      #self.size = self._get_file_size( self.full_path )
+      self.name = FileManager.file_basename( self.full_path )
+      self.ext = FileManager.file_extension( self.full_path )
 
       self._determine_size()
       self._determine_dates()
@@ -35,15 +37,15 @@ class file_type_info:
    #
    #
    def _determine_size(self):
-      self.size = self._get_file_size( self.full_path )
+      self.size = FileManager.file_size( self.full_path )
       if self.size == None:
          self.size_error_status = "Error geting size"
 
    #
    #
    def _determine_dates(self):
-      #self.date_created = time.strftime( "%Y-%b-%d %H:%M", time.localtime( self._get_file_date( self.full_path, "c" ) ) )
-      self.date_modified_localtime = time.localtime( self._get_file_date( self.full_path, "m" ) )
+      ##self.date_created = time.strftime( "%Y-%b-%d %H:%M", time.localtime( self._get_file_date( self.full_path, "c" ) ) )
+      self.date_modified_localtime = time.localtime( FileManager.file_date( self.full_path, "m" ) )
       self.date_modified = time.strftime( "%Y-%m-%d", self.date_modified_localtime ) #time.localtime( self._get_file_date( self.full_path, "m" ) ) )
 
       if self.date_modified == None:
@@ -73,64 +75,6 @@ class file_type_info:
          self.audio_error = ""
       else:
          self.audio_error = "Error!! Unknow audio format"
-
-
-   #
-   #
-   def _get_full_path( self, work_folder, local_file ):
-      f_full = work_folder + "/" + local_file
-      return f_full
-
-
-   #
-   # Retrieves size in kb from a full_path file
-   # @return file size or 0
-   #
-   def _get_file_size( self, f_full ):
-      f_size = None
-      
-      # some microsd files gives access errors
-      try:
-         f_size = os.path.getsize(f_full) / 1024
-      except:
-         #print("Something wrong getting size of: " + f_full )
-         raise
-
-      finally:
-         return f_size
-
-
-   #
-   # Retrieves file date
-   # @date_type specifies which date type
-   #     "c"   -> means creation date
-   #     "m"   -> means modified date
-   #
-   def _get_file_date( self, f_full, date_type ):
-      f_date = None
-      
-      try:
-
-         if date_type == "c":
-            f_date = os.path.getctime(f_full)
-         elif date_type == "m":
-            f_date = os.path.getmtime(f_full)
-
-      except:
-         #print("Something wrong getting creation date of: " + f_full )
-         raise
-
-      finally:
-         return f_date
-
-
-   #
-   #
-   #
-   def _get_local_file_size( self, work_folder, local_file ):
-      return self._get_file_size( self._get_full_path( work_folder, local_file ) )
-
-
 
 
 
@@ -163,7 +107,8 @@ def traverse_folder( subfolder):
    global total_saved_albums
    global total_saved_albums_size
 
-   work_folder = opt.source_root_path + "/" + subfolder
+   #work_folder = opt.source_root_path + "/" + subfolder
+   work_folder = FileManager.concat_folder( opt.source_root_path, subfolder )
    #for path_name, dirs, files in os.walk( root_folder ):
 
    children_folders = set()
@@ -186,21 +131,25 @@ def traverse_folder( subfolder):
             xml_album = None
             if opt.update_mode:
                xml_album = find_node_by_value( xml_section, "album", "src", subfolder )
+               if xml_album == None:
+                  Log.log("  + found new album")
 
             if xml_album == None:
                xml_album = xml_doc.createElement( "album" )
                xml_album.setAttribute("src", subfolder )
                xml_section.appendChild( xml_album )
+               
+               total_saved_albums = total_saved_albums + 1
+               core.utils.log_album( subfolder )
 
             album_size=0
-            core.utils.log_album( subfolder )
 
             # process songs
             album_size = process_album_items( items_type_info_set, xml_album )
 
             set_xml_album_size( xml_album, album_size )
 
-            total_saved_albums = total_saved_albums + 1
+            #total_saved_albums = total_saved_albums + 1
             total_saved_albums_size = total_saved_albums_size + album_size
 
 
@@ -210,7 +159,7 @@ def traverse_folder( subfolder):
          traverse_folder( ss  )
 
    except Exception as e:
-      core.utils.log_error("Something wrong in traverse_folder.\nException: \n" + repr(e) )
+      Log.log_error("Something wrong in traverse_folder.\nException: \n" + repr(e) )
       raise
 
 
@@ -229,7 +178,7 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
    since_date_localtime = time.strptime( opt.since_date, "%Y-%m-%d" );
    #print "----------- since_date_localtime: " + str( since_date_localtime )
 
-   core.utils.log( "processing: " + subfolder + "...", opt.verbose_mode )
+   Log.log( "processing: " + subfolder + "...", opt.verbose_mode )
 
    # Here store subfolders, items and commented_items
    try:
@@ -257,11 +206,11 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
                break
 
    except OSError as e:
-      core.utils.log_error( "Error iterating over: " + work_folder + "\nException:\n" + repr(e) )
+      Log.log_error( "Iterating over : " + work_folder + "\nException:\n" + repr(e) )
       raise
 
    except Exception as e:
-      core.utils.log_error("Unknow exception when iterating over: " + work_folder + "\nException:\n" + repr(e) )
+      Log.log_error("Unknow exception when iterating over: " + work_folder + "\nException:\n" + repr(e) )
       raise
 
 
@@ -276,13 +225,35 @@ def process_album_items( items_info_type_set, xml_album ):
 
    for i in items_info_type_set:
       #print(   "- adding: " + i ); 
-      g_total_processed_items = g_total_processed_items + 1
+      #g_total_processed_items = g_total_processed_items + 1
 
       f = file_type_info( i.work_folder, i.item )
       
       if i.is_comment:
-         process_album_commented_item( item_type_info( i.work_folder, i.item, True ), xml_album )
+         if opt.update_mode != None:
+            process_album_commented_item( item_type_info( i.work_folder, i.item, True ), xml_album )
+         
          continue
+   
+      xml_item = None
+
+      if opt.update_mode:
+         xml_item = find_node_by_value( xml_album, "item", "src", f.local_file )
+         if xml_item == None:
+            Log.log("  + found new item")
+         else:
+            attr_sz = xml_item.attributes["size"]
+            if attr_sz:
+               #print "attr_sz = " + attr_sz.value + " || f.size = " + str( f.size )
+               if long(attr_sz.value) != f.size:
+                  Log.log("  + updating existing item with different size")
+                  xml_album.removeChild( xml_item )
+                  xml_item = None
+         
+      if xml_item != None:
+         continue
+
+      g_total_processed_items = g_total_processed_items + 1
 
       xml_item = create_xml_item( f ) 
       set_xml_item_size( xml_item, f ) 
@@ -304,6 +275,9 @@ def process_album_items( items_info_type_set, xml_album ):
 #
 #
 def process_album_commented_item( i, xml_album ):
+
+   if opt.update_mode:
+      return
 
    f = file_type_info( i.work_folder, i.item )
 
@@ -345,7 +319,7 @@ def create_xml_item( f_object ):
 #
 def set_xml_item_size( xml_item, f_type ):
    if f_type.size != None:
-      xml_item.setAttribute( "size", "{0:.1f}".format( f_type.size / 1024.0 ) + " Mb" )
+      xml_item.setAttribute( "size", str( f_type.size ) )
    else:
       xml_item.setAttribute( "size_error", "error getting size" )
 
@@ -406,9 +380,20 @@ def set_xml_item_audio_info( xml_item, f ):
 #
 #
 def set_xml_album_size( xml_album, album_size ):
-   xml_album.setAttribute("size", "{0:.2f}".format( album_size / 1024.0 ) + " Mb" )
+   #xml_album.setAttribute("size", "{0:.2f}".format( album_size / 1024.0 / 1024.0 ) + " Mb" )
+   xml_album.setAttribute("size", str( album_size ) )
 
 
+#
+# return node for attrib_key = attrib_value
+#
+def find_node_by_value( parent_node, node_name, a_attrib_key, a_attrib_value ):
+   for subnode in parent_node.getElementsByTagName( node_name ):
+      attr = subnode.attributes[ a_attrib_key ]
+      if attr != None:
+         if a_attrib_value == attr.value:
+            return subnode
+   return None
 
 
 
@@ -428,7 +413,7 @@ def initialize_target_xml( full_output_filename ):
 
    # create target folder
    if not os.path.exists(opt.output_path):
-      core.utils.log( "Creating folder: " + opt.output_path )
+      Log.log( "Creating folder: " + opt.output_path )
       os.makedirs(opt.output_path)
 
    # check if target file exists
@@ -438,12 +423,12 @@ def initialize_target_xml( full_output_filename ):
    if opt.dry_run == False and opt.update_mode == False and is_file:
       resp = raw_input( "\nFile: " + full_output_filename + " exists. \ndo you want to be overwritted (y/N) ?" )
       if resp!="y" and resp!="Y":
-         core.utils.log( "\nOperation canceled by the user" )
+         Log.log( "\nOperation canceled by the user" )
          exit(0)
 
    # we're updating so exit if file does not exists
    if opt.update_mode and is_file == False:
-      core.utils.log("\nCan not update a non existing target file: " + full_output_filename )
+      Log.log("\nCan not update a non existing target file: " + full_output_filename )
       exit(0)
 
    # open and set working variables if file exists and we're updating
@@ -494,12 +479,27 @@ def load_target_xml( full_output_filename ):
    
    global xml_doc
    global xml_section
+   global opt
 
    xml_doc = parse( full_output_filename )
    #sec_node = xml_mngr.find_node( xml_doc, "section" )
    #opt.section_id = sec_node.attribute("id")
    #opt.source_folder = sec_node.attribute("source")
 
+   xml_sections_list = xml_doc.getElementsByTagName( "section" )
+   xml_section = xml_sections_list[0]
+
+   if xml_section == None:
+      Log.log_error( "Oops! not found section node while leading xml" )
+      exit(1)
+
+   attr_src = xml_section.attributes[ "source" ]
+   if attr_src != None:
+      opt.source_root_path = attr_src.value
+
+   attr_id = xml_section.attributes[ "id" ]
+   if attr_id != None:
+      opt.section_id = attr_id.value
 
 
 
@@ -510,12 +510,12 @@ def load_target_xml( full_output_filename ):
 
 def save_xml( full_filename ):
    
-   tot_sz_gb = "{0:.2f}".format( total_saved_albums_size / 1024.0 / 1024.0 ) + " Gb"
+   tot_sz_gb = "{0:.2f}".format( total_saved_albums_size / 1024.0 / 1024.0 / 1024.0 ) + " Gb"
 
-   core.utils.log("")
-   core.utils.log( "  . total albums found : " + str(total_saved_albums) )
-   core.utils.log( "  . total items found  : " + str(g_total_processed_items) )
-   core.utils.log( "  . total size : " + tot_sz_gb + "  ( " + str(total_saved_albums_size) + " Mb )"  )
+   Log.log("")
+   Log.log( "  . total albums found : " + str(total_saved_albums) )
+   Log.log( "  . total items found  : " + str(g_total_processed_items) )
+   Log.log( "  . total size : " + tot_sz_gb + "  ( " + str(total_saved_albums_size/1024.0/1024.0) + " Mb )"  )
 
    if opt.dry_run:
       return
@@ -524,10 +524,16 @@ def save_xml( full_filename ):
    xml_section.setAttribute( "items", str(g_total_processed_items) )
    xml_section.setAttribute( "size", tot_sz_gb )
 
-   f = open( full_filename, 'w' )
-   xml_doc.writexml( f, indent="  ", addindent="  ", newl='\n' )
+   if opt.update_mode == False or ( opt.update_mode and g_total_processed_items ):
+  
+      f = open( full_filename, 'w' )
+      #xml_doc.writexml( f, xml_doc.toprettyxml(indent='  ', newl='\n' ) ) #indent="  ", addindent="  ", newl="\r\n" )
+      if opt.update_mode:
+         xml_doc.writexml( f, newl='\n' )
+      else:
+         xml_doc.writexml( f, indent='  ', addindent='  ', newl='\n' )
 
-   core.utils.log( "\nData have been saved to the XML file: " + full_filename )
+      Log.log( "\nData have been saved to the XML file: " + full_filename )
 
    # last unlink xml
    xml_doc.unlink()
@@ -545,40 +551,40 @@ def show_settings_info( title, request_user_confirm = False ):
    str_mode = None
 
    if opt.dry_run:
-      str_mode = "DRY RUN"
+      str_mode = "dry run"
 
    if opt.update_mode:
       if str_mode:
-         str_mode = str_mode + " and UPDATE"
+         str_mode = str_mode + " and update"
       else:
-         str_mode = "UPDATE"
+         str_mode = "update"
 
    if str_mode == None:
-      str_mode = "NORMAL"
+      str_mode = "normal"
 
-   core.utils.log("")
-   core.utils.log("  " + title )
-   core.utils.log("")
-   core.utils.log("  - source root_path : " + str(opt.source_root_path) )
-   core.utils.log("  - output file      : " + full_output_filename )
-   core.utils.log("  - section id       : " + str(opt.section_id) )
-   core.utils.log("  - since date       : " + opt.since_date )
-   core.utils.log("  - supported audio file types   : " + str(supported_audio_file_types) ) 
-   core.utils.log("  - supported comment file types : " + str(supported_comment_file_types)) 
-   core.utils.log("  - verbose : " + str(opt.verbose_mode)) 
-   core.utils.log("  - dry_run mode : " + str(opt.dry_run)) 
-   core.utils.log("  - update : " + str(opt.update_mode)) 
-   core.utils.log("")
-   core.utils.log("  Notes:")
-   core.utils.log("    * folders/albums with no audio files will not be added by default" )
-   core.utils.log("    * commented files with characters '-' in its name will be marked with '***' and replaced with ' '")
-   core.utils.log("")
-   core.utils.log("  - working mode     : " + str_mode )
+   Log.log("")
+   Log.log("  " + title )
+   Log.log("")
+   Log.log("  - source root_path : " + str(opt.source_root_path) )
+   Log.log("  - output file      : " + full_output_filename )
+   Log.log("  - section id       : " + str(opt.section_id) )
+   Log.log("  - since date       : " + opt.since_date )
+   Log.log("  - supported audio file types   : " + str(supported_audio_file_types) ) 
+   Log.log("  - supported comment file types : " + str(supported_comment_file_types)) 
+   Log.log("  - verbose : " + str(opt.verbose_mode)) 
+   Log.log("  - dry_run mode : " + str(opt.dry_run)) 
+   Log.log("  - update : " + str(opt.update_mode)) 
+   Log.log("")
+   Log.log("  Notes:")
+   Log.log("    * folders/albums with no audio files will not be added by default" )
+   Log.log("    * commented files with characters '-' in its name will be marked with '***' and replaced with ' '")
+   Log.log("")
+   Log.log("  - working mode     : " + str_mode )
 
    if request_user_confirm:
       resp = raw_input( "\nContinue with this settings (Y/n) ?" )
       if resp=="n" or resp=="N":
-         core.utils.log( "\nOperation canceled by the user" )
+         Log.log( "\nOperation canceled by the user" )
          exit(0)
 
 
@@ -671,38 +677,11 @@ show_settings_info( "AK_GENERATE Current Settings", True )
 
 
 
-
-
 #
 # checks whether output file exists
 # needed in case of update mode
 #
 initialize_target_xml( full_output_filename )
-
-
-#full_output_filename = opt.output_path + "/" + opt.section_id + ".xml"
-# if opt.dry_run == False and os.path.isfile( full_output_filename ):
-#
-#    # if creating new asks for confirmation
-#    if opt.update == None:
-#       resp = raw_input( "\nFile: " + full_output_filename + " exists. \ndo you want to be overwritted (y/N) ?" )
-#       if resp!="y" and resp!="Y":
-#          core.utils.log( "\nOperation canceled by the user" )
-#          exit(0)
-
-      
-
-
-
-
-#
-# create xml header <section> info
-#
-#xml_section = xml_doc.createElement("section")
-#xml_section.setAttribute( "id", opt.section_id )
-#xml_section.setAttribute( "source", opt.source_root_path )
-#xml_section.setAttribute( "since_date", opt.since_date )
-#xml_root.appendChild(xml_section)
 
 
 
@@ -718,17 +697,13 @@ traverse_folder( "" )
 
 
 
-
-#
 #
 show_settings_info("AK_GENERATE Used Settings")
 
 
-#
 # 
 #
 save_xml( full_output_filename )
-
 
 
 

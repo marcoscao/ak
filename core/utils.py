@@ -1,9 +1,132 @@
+import os
 from xml.dom.minidom import *
+
+
+class FileManager:   
+
+   #
+   # concatenate path and file
+   # note that a_file shouldn't start with '/'
+   #
+   @staticmethod
+   def full_path( a_path, a_file ):
+      #f_full = a_work_folder + "/" + local_file
+      #return f_full
+      return os.path.join( a_path, a_file )
+
+
+   #
+   # concatenate folders ( note: not folder + file )
+   #
+   @staticmethod
+   def concat_folder( a_path_1, a_folder ):
+      if a_path_1.endswith('/'):
+         a_path_1 = a_path_1[:-1]
+
+      if a_folder.startswith('/'):
+         a_folder = a_folder[1:]
+
+      return a_path_1 + "/" + a_folder
+
+
+   #
+   # add end slash
+   #
+   @staticmethod
+   def add_end_slash( folder ):
+      if folder.endswith('/'):
+         folder = folder[:-1]
+      return folder
+
+
+   #
+   # add start slash
+   #
+   @staticmethod
+   def add_start_slash( folder ):
+      if folder.startswith('/'):
+         folder = folder[1:]
+      return folder
+
+   
+
+   #
+   # retrieves basename from a full path file
+   #
+   @staticmethod
+   def file_basename( a_full_path ):
+      name, ext = os.path.splitext( a_full_path )
+      return name
+
+
+   #
+   # retrieves extension from a full path file
+   #
+   @staticmethod
+   def file_extension( a_full_path ):
+      name, ext = os.path.splitext( a_full_path )
+      return ext
+
+
+   #
+   # Retrieves size in bytes from a full_path file
+   # @return file size, None or exception
+   #
+   @staticmethod
+   def file_size( f_full ):
+      f_size = None
+      
+      # some microsd files gives access errors
+      try:
+         f_size = os.path.getsize(f_full)
+      except:
+         #print("Something wrong getting size of: " + f_full )
+         log_error( "Something wrong getting size of: " + f_full )
+         raise
+
+      finally:
+         return f_size
+
+
+   #
+   # file size overload ( passing file and path separated )
+   #
+   @staticmethod
+   def local_file_size( a_path, a_file ):
+      return FileManager.file_size( FileManager.full_path( a_path, a_file ) )
+
+   
+   #
+   # Retrieves file date
+   # @date_type specifies which date type
+   #     "c"   -> means creation date
+   #     "m"   -> means modified date
+   #
+   @staticmethod
+   def file_date( f_full, date_type ):
+
+      f_date = None
+      
+      try:
+         if date_type == "c":
+            f_date = os.path.getctime(f_full)
+         elif date_type == "m":
+            f_date = os.path.getmtime(f_full)
+      except:
+         #print("Something wrong getting creation date of: " + f_full )
+         log_error( "Something wrong getting date of: " + f_full )
+         raise
+
+      finally:
+         return f_date
+
+
+
 
 #
 # Manages xml: creation, update, ...
 #
-class xml_manager:
+class XmlManager:
 
    version_value = "01.01.003"
 
@@ -117,6 +240,36 @@ class xml_manager:
          return
 
       xml_node.setAttribute( attrib_id, attrib_value )
+
+
+
+class Log:
+
+   verbose_mode = True
+
+   #
+   #
+   #
+   @staticmethod
+   def log( msg, a_vm = verbose_mode ):
+      if a_vm:
+         print( msg )
+
+
+   #
+   # Error msg
+   #
+   @staticmethod
+   def log_error( msg ):
+      Log.log( "ERROR : " + msg )
+
+
+   #
+   # Shows a critical error
+   #
+   def log_critical_error( msg ):
+      Log.log( "CRITICAL_ERROR : " + msg, True )
+
 
 
 
