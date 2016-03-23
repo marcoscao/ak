@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 from core.utils import FileManager
 from core.utils import Log
 
@@ -13,6 +15,12 @@ import mutagen
 from xml.dom.minidom import *
 from mutagen.mp3 import MP3
 from mutagen.flac import FLAC
+
+
+
+def current_date_time():
+   return time.strftime("%Y/%m/%d %H:%M:%S")
+
 
 
 #
@@ -136,7 +144,8 @@ def traverse_folder( subfolder):
 
             if xml_album == None:
                xml_album = xml_doc.createElement( "album" )
-               xml_album.setAttribute("src", subfolder )
+               xml_album.setAttribute( "src", subfolder )
+               xml_album.setAttribute( "add", current_date_time() )
                xml_section.appendChild( xml_album )
                
                total_saved_albums = total_saved_albums + 1
@@ -256,6 +265,7 @@ def process_album_items( items_info_type_set, xml_album ):
       g_total_processed_items = g_total_processed_items + 1
 
       xml_item = create_xml_item( f ) 
+      xml_item.setAttribute( "add", current_date_time() )
       set_xml_item_size( xml_item, f ) 
       set_xml_item_dates( xml_item, f ) 
 
@@ -334,7 +344,7 @@ def set_xml_item_dates( xml_item, f_type ):
    #    xml_item.setAttribute( "date_error", "error getting creation date" )
 
    if f_type.date_modified != None:
-      xml_item.setAttribute( "modified_date", f_type.date_modified )
+      xml_item.setAttribute( "fdate", f_type.date_modified )
    else:
       xml_item.setAttribute( "date_error", "error getting modified date" )
 
@@ -367,12 +377,12 @@ def set_xml_item_audio_info( xml_item, f ):
 
    elif isinstance( f.audio_type, FLAC ):
       try:
-         xml_item.setAttribute("sample_rate", str(f.audio_type.info.sample_rate) )
+         xml_item.setAttribute("srate", str(f.audio_type.info.sample_rate) )
          xml_item.setAttribute("length", time.strftime("%H:%M:%S", time.gmtime( f.audio_type.info.length ) ) )
 
       except Exception as e:
          print("** Error getting FLAC info: " + repr(e) )
-         xml_item.setAttribute("sample_rate", "0")
+         xml_item.setAttribute("srate", "0")
          xml_item.setAttribute("length", "0")
          xml_item.setAttribute("audio_error", "FLAC exception: " + repr(e) )
 
@@ -459,7 +469,8 @@ def create_target_xml():
 
    xml_section.setAttribute( "id", opt.section_id )
    xml_section.setAttribute( "source", opt.source_root_path )
-   xml_section.setAttribute( "since_date", opt.since_date )
+   #xml_section.setAttribute( "since_date", opt.since_date )
+   xml_section.setAttribute( "create", current_date_time() )
 
    #date = current_date
    #xml_section.setAttribute( "created_date", created_date )
@@ -523,6 +534,7 @@ def save_xml( full_filename ):
    xml_section.setAttribute( "albums", str(total_saved_albums) )
    xml_section.setAttribute( "items", str(g_total_processed_items) )
    xml_section.setAttribute( "size", tot_sz_gb )
+   xml_section.setAttribute( "update", current_date_time() )
 
    if opt.update_mode == False or ( opt.update_mode and g_total_processed_items ):
   
