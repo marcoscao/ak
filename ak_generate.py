@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 from core.utils import FileManager
+from core.utils import XmlManager
 from core.utils import Log
 
 import core.utils  
@@ -105,19 +106,57 @@ class item_type_info:
 
 #
 # Iterating over directory tree
-#
+# if first_time = True, the subfolder won't be created
 
-def traverse_folder( subfolder):
+def traverse_folder( subfolder, first_time = False ):
    
-   if subfolder!="":
-      subfolder = subfolder + "/"
-
    global total_saved_albums
    global total_saved_albums_size
+   global xml_source_parent
 
-   #work_folder = opt.source_root_path + "/" + subfolder
    work_folder = FileManager.concat_folder( opt.source_root_path, subfolder )
-   #for path_name, dirs, files in os.walk( root_folder ):
+   xml_previous_source_parent = xml_source_parent
+
+   # creates xml source entry ( parent )
+   last_subfolder = os.path.basename( os.path.normpath( subfolder ) );
+            
+   nd_folder = find_node_by_value( xml_source_parent, "source", "src", last_subfolder )
+   if nd_folder != None:
+      xml_source_parent = nd_folder
+
+
+   if first_time == False and node_attribute( xml_source_parent, "src" ) != last_subfolder:
+      #print( "going to create: \'"+last_subfolder+"\' during traverse_folder" )
+      #nd = find_node_by_value( xml_source_parent, "source", "src", last_subfolder )
+      #if nd == None:
+      #   xml_source_parent = create_xml_source( xml_source_parent, last_subfolder ) 
+      #else:
+      #   xml_source_parent = nd
+
+      xml_source_parent = create_xml_source( xml_source_parent, last_subfolder ) 
+
+   print( "\n** entering traverse_folder:" )
+   print( "  subfolder : " + subfolder )
+   print( "  last_subfolder : " + last_subfolder )
+   print( "  xml_source_node: " + str(node_attribute( xml_source_parent, "src" )) )
+   print( "  xml_previous_source_node: " + str(node_attribute( xml_previous_source_parent, "src" )) )
+
+   #if subfolder.endswith('/'):
+   #   subfolder = subolder[:-1]
+
+   subfolder = subfolder + "/"
+
+   # if subfolder != None:
+   #    subfolder = subfolder + "/"
+   #    work_folder = FileManager.concat_folder( opt.source_root_path, subfolder )
+   # else:
+   #    work_folder = FileManager.concat_folder( opt.source_root_path, "" )
+   #    subfolder=opt.source_root_path_last_folder + "/"
+
+
+   ##work_folder = opt.source_root_path + "/" + subfolder
+   #work_folder = FileManager.concat_folder( opt.source_root_path, subfolder )
+   ##for path_name, dirs, files in os.walk( root_folder ):
 
    children_folders = set()
    items_type_info_set = set()
@@ -125,6 +164,8 @@ def traverse_folder( subfolder):
    try:
       # get items from subfolder
       process_subfolder_data( subfolder, children_folders, items_type_info_set )
+
+
 
       # by default do not create albums where all items are comments
       all_comments = True
@@ -137,19 +178,22 @@ def traverse_folder( subfolder):
          if items_type_info_set:
 
             xml_album = None
-            if opt.update_mode:
-               xml_album = find_node_by_value( xml_section, "album", "src", subfolder )
-               if xml_album == None:
-                  Log.log("  + found new album")
+            #if opt.update_mode:
+            #xml_album = find_node_by_value( xml_section, "album", "src", subfolder )
+            xml_album = find_node_by_value( xml_source_parent, "album", "src", last_subfolder )
+            if xml_album == None:
+               #Log.log("  + found new album")
+               create_new_update_entry( "added_new_album", last_subfolder )
 
             if xml_album == None:
                xml_album = xml_doc.createElement( "album" )
-               xml_album.setAttribute( "src", subfolder )
+               xml_album.setAttribute( "src", last_subfolder )
                xml_album.setAttribute( "add", current_date_time() )
-               xml_section.appendChild( xml_album )
+               #xml_section.appendChild( xml_album )
+               xml_source_parent.appendChild( xml_album )
                
                total_saved_albums = total_saved_albums + 1
-               core.utils.log_album( subfolder )
+               core.utils.log_album( last_subfolder )
 
             album_size=0
 
@@ -166,6 +210,16 @@ def traverse_folder( subfolder):
       # iterate over the rest of subfolders
       for ss in children_folders:
          traverse_folder( ss  )
+
+
+      xml_source_parent = xml_previous_source_parent
+
+      print( "\n******** END traverse_folder:" )
+      print( "  subfolder : " + subfolder )
+      print( "  last_subfolder : " + last_subfolder )
+      print( "  xml_source_node: " + str(node_attribute( xml_source_parent, "src" )) )
+      print( "  xml_previous_source_node: " + str(node_attribute( xml_previous_source_parent, "src" )) )
+
 
    except Exception as e:
       Log.log_error("Something wrong in traverse_folder.\nException: \n" + repr(e) )
@@ -198,6 +252,7 @@ def process_subfolder_data( subfolder, children_folders, items_info_type_set ):
          if os.path.isdir( f_full ): #work_folder + "/" + ss ):
             #print("dir entry   : " + ss )
             children_folders.add( subfolder + ss )
+
 
          if time.localtime( os.path.getmtime( f_full ) ) < since_date_localtime:
             #print "* omitted item : " + ss + "  --  date " + \
@@ -239,25 +294,26 @@ def process_album_items( items_info_type_set, xml_album ):
       f = file_type_info( i.work_folder, i.item )
       
       if i.is_comment:
-         if opt.update_mode != None:
-            process_album_commented_item( item_type_info( i.work_folder, i.item, True ), xml_album )
-         
+         #if opt.update_mode != None:
+         process_album_commented_item( item_type_info( i.work_folder, i.item, True ), xml_album )
          continue
    
       xml_item = None
 
-      if opt.update_mode:
-         xml_item = find_node_by_value( xml_album, "item", "src", f.local_file )
-         if xml_item == None:
-            Log.log("  + found new item")
-         else:
-            attr_sz = xml_item.attributes["size"]
-            if attr_sz:
-               #print "attr_sz = " + attr_sz.value + " || f.size = " + str( f.size )
-               if long(attr_sz.value) != f.size:
-                  Log.log("  + updating existing item with different size")
-                  xml_album.removeChild( xml_item )
-                  xml_item = None
+      #if opt.update_mode:
+      xml_item = find_node_by_value( xml_album, "item", "src", f.local_file )
+      if xml_item == None:
+         #Log.log("  + found new item")
+         create_new_update_entry( "added_new_item", f.full_path )
+      else:
+         attr_sz = xml_item.attributes["size"]
+         if attr_sz:
+            #print "attr_sz = " + attr_sz.value + " || f.size = " + str( f.size )
+            if long(attr_sz.value) != f.size:
+               Log.log("  + updating existing item with different size")
+               create_new_update_entry( "update_modified_item", f.full_path )
+               xml_album.removeChild( xml_item )
+               xml_item = None
          
       if xml_item != None:
          continue
@@ -286,8 +342,8 @@ def process_album_items( items_info_type_set, xml_album ):
 #
 def process_album_commented_item( i, xml_album ):
 
-   if opt.update_mode:
-      return
+   #if opt.update_mode:
+   #   return
 
    f = file_type_info( i.work_folder, i.item )
 
@@ -394,6 +450,16 @@ def set_xml_album_size( xml_album, album_size ):
    xml_album.setAttribute("size", str( album_size ) )
 
 
+
+#
+# return first node matching or None
+#
+def find_node( parent_node, node_name ):
+   for subnode in parent_node.getElementsByTagName( node_name ):
+      return subnode
+   return None
+
+
 #
 # return node for attrib_key = attrib_value
 #
@@ -407,6 +473,104 @@ def find_node_by_value( parent_node, node_name, a_attrib_key, a_attrib_value ):
 
 
 
+#
+# Returns node attribute key value ( None if not node )
+#
+def node_attribute( node, a_attrib_key ):
+   #print( "node_attribute for " + a_attrib_key )
+
+   if node == None:
+      return None
+
+   atr = node.attributes[ a_attrib_key ]
+   if atr == None:
+      return None
+
+   return atr.value
+
+
+
+#
+# create a new album entry inside <updates><update_serie>
+# it's only interesting info, the real album data is within <section>
+#
+def create_new_update_entry( tag_name, desc ):
+   
+   global xml_current_updates
+
+   if xml_current_updates == None:
+      xml_current_updates = xml_doc.createElement( "update" )
+      xml_current_updates.setAttribute( "date", current_date_time() )
+      xml_updates.appendChild( xml_current_updates )
+
+   xml_upd_new = xml_doc.createElement( tag_name )
+   xml_upd_new.appendChild( xml_doc.createTextNode( desc ) )
+   xml_current_updates.appendChild( xml_upd_new )
+
+
+
+
+#
+# Parse opr.source_path to create all implicit initial passed subfolders if not previously created
+# sets the initial xml_source_parent
+#
+
+def create_xml_sources_entries():
+
+   global xml_source_parent
+   global xml_root
+   
+   # get main <sources> section
+   xml_source_parent = find_node( xml_doc, "sources" )  
+
+   if xml_source_parent == None:
+      Log.log_error("Not found main <sources> xml section")
+      exit(1)
+
+   # iterate over each source path folder
+   for e in opt.source_root_path.split('/'):
+      if e==None or e=="":
+         continue
+
+      print "************ iterating source: " + e
+
+      # do not create the last one, it will be created later
+      #if e == opt.source_root_path_last_folder:
+      #   continue
+
+      print "************ processing source: " + e
+
+      nd = find_node_by_value( xml_source_parent, "source", "src", e )
+      if nd == None:
+         xml_source_parent = create_xml_source( xml_source_parent, e ) 
+      else:
+         xml_source_parent = nd
+
+
+   # build last folder
+   nd = find_node_by_value( xml_source_parent, "source", "src", opt.source_root_path_last_folder )
+   if nd == None:
+      xml_source_parent = create_xml_source( xml_source_parent, opt.source_root_path_last_folder ) 
+   else:
+      xml_source_parent = nd
+
+
+
+#
+# return created source node
+#
+def create_xml_source( xml_source_parent, source_name ):
+
+   Log.log("Creating new source folder: " + source_name )
+   
+   xml_source = xml_doc.createElement( "source" )
+   xml_source.setAttribute( "src", source_name )
+   xml_source.setAttribute( "created", current_date_time() )
+   xml_source_parent.appendChild( xml_source )
+
+   return xml_source
+
+
 
 #
 # Initialize XML target file, either creating a new one or importing existing if in "update_mode"
@@ -417,9 +581,9 @@ def initialize_target_xml( full_output_filename ):
    global opt
 
    # need to create it "virtually" due to design and traverse items
-   if opt.dry_run and opt.update_mode == False:
-      create_target_xml()
-      return
+   #if opt.dry_run and opt.update_mode == False:
+   #   create_memory_xml()
+   #   return
 
    # create target folder
    if not os.path.exists(opt.output_path):
@@ -430,22 +594,27 @@ def initialize_target_xml( full_output_filename ):
    is_file = os.path.isfile( full_output_filename )
 
    # asks before overwrite existing one
-   if opt.dry_run == False and opt.update_mode == False and is_file:
-      resp = raw_input( "\nFile: " + full_output_filename + " exists. \ndo you want to be overwritted (y/N) ?" )
-      if resp!="y" and resp!="Y":
-         Log.log( "\nOperation canceled by the user" )
-         exit(0)
+   #if opt.dry_run == False and opt.update_mode == False and is_file:
+   #   resp = raw_input( "\nFile: " + full_output_filename + " exists. \ndo you want to be overwritted (y/N) ?" )
+   #   if resp!="y" and resp!="Y":
+   #      Log.log( "\nOperation canceled by the user" )
+   #      exit(0)
 
    # we're updating so exit if file does not exists
-   if opt.update_mode and is_file == False:
-      Log.log("\nCan not update a non existing target file: " + full_output_filename )
-      exit(0)
+   #if opt.update_mode and is_file == False:
+   #   Log.log("\nCan not update a non existing target file: " + full_output_filename )
+   #   exit(0)
 
    # open and set working variables if file exists and we're updating
-   if opt.update_mode and is_file:
-      load_target_xml( full_output_filename )
+   #if opt.update_mode and is_file:
+   if is_file:
+      load_target_xml_in_memory( full_output_filename )
    else:
-      create_target_xml()
+      create_target_xml_in_memory()
+
+
+   # create initial folders if needed ( opt.source_path argument )
+   create_xml_sources_entries()
 
 
 
@@ -455,14 +624,22 @@ def initialize_target_xml( full_output_filename ):
 #
 # Creating new xml
 #
-def create_target_xml():
+#def create_target_xml():
+def create_target_xml_in_memory():
 
    global xml_doc
+   global xml_root
    global xml_section
+   global xml_updates
+   global xml_source_parent
 
    xml_doc = Document()
    xml_root = xml_doc.createElement("root")
+   xml_root.setAttribute( "version", XmlManager.xml_file_version )
    xml_doc.appendChild( xml_root )
+
+   xml_updates = xml_doc.createElement("updates")
+   xml_root.appendChild(xml_updates)
 
    xml_section = xml_doc.createElement("section")
    xml_root.appendChild(xml_section)
@@ -481,32 +658,54 @@ def create_target_xml():
    #xml_section.setAttribute( "total_albums_size", tot_sz_gb )
    #xml_section.setAttribute( "total_items", str(g_total_processed_items) )
 
+   # main sources section
+   xml_source_parent = xml_doc.createElement( "sources" )
+   xml_root.appendChild( xml_source_parent )
+
+
+
 
 
 #
 # Load and existing target xml
 #
-def load_target_xml( full_output_filename ):
+def load_target_xml_in_memory( full_output_filename ):
    
    global xml_doc
    global xml_section
+   global xml_updates
    global opt
 
-   xml_doc = parse( full_output_filename )
+   with open( full_output_filename, "r" ) as f:
+      s = f.read()
+      s = s.replace('\r\n','')
+      #s = s.rstrip()
+      #s = s.lstrip()
+
+   #xml_doc = parse( full_output_filename )
+   xml_doc = parseString( s )
+
    #sec_node = xml_mngr.find_node( xml_doc, "section" )
    #opt.section_id = sec_node.attribute("id")
    #opt.source_folder = sec_node.attribute("source")
+
+   xml_upds_list = xml_doc.getElementsByTagName( "updates" )
+   xml_updates = xml_upds_list[0]
+
+   if xml_updates == None:
+      Log.log_error( "Oops! not found updates section node while loading xml" )
+      exit(1)
 
    xml_sections_list = xml_doc.getElementsByTagName( "section" )
    xml_section = xml_sections_list[0]
 
    if xml_section == None:
-      Log.log_error( "Oops! not found section node while leading xml" )
+      Log.log_error( "Oops! not found section node while loading xml" )
       exit(1)
 
-   attr_src = xml_section.attributes[ "source" ]
-   if attr_src != None:
-      opt.source_root_path = attr_src.value
+   #attr_src = xml_section.attributes[ "source" ]
+   #if attr_src != None:
+   #   opt.source_root_path = attr_src.value
 
    attr_id = xml_section.attributes[ "id" ]
    if attr_id != None:
@@ -536,16 +735,22 @@ def save_xml( full_filename ):
    xml_section.setAttribute( "size", tot_sz_gb )
    xml_section.setAttribute( "update", current_date_time() )
 
-   if opt.update_mode == False or ( opt.update_mode and g_total_processed_items ):
+   #if opt.update_mode == False or ( opt.update_mode and g_total_processed_items ):
   
-      f = open( full_filename, 'w' )
-      #xml_doc.writexml( f, xml_doc.toprettyxml(indent='  ', newl='\n' ) ) #indent="  ", addindent="  ", newl="\r\n" )
-      if opt.update_mode:
-         xml_doc.writexml( f, newl='\n' )
-      else:
-         xml_doc.writexml( f, indent='  ', addindent='  ', newl='\n' )
+   f = open( full_filename, "wb" )
+   #xml_doc.writexml( f, xml_doc.toprettyxml(indent='  ', newl='\n' ) ) #indent="  ", addindent="  ", newl="\r\n" )
+   # if opt.update_mode:
+   #    s1 = xml_doc.toxml()
+   #    #xml_doc.writexml( f, newl='\n' )
+   #    #xml_doc.writexml( f )
+   #    xml_doc.writexml( f, indent='  ', addindent='  ', newl='\r\n' )
+   # else:
+   #    xml_doc.writexml( f, indent='  ', addindent='  ', newl='\r\n' )
+   #    #xml_doc.writexml( f )
 
-      Log.log( "\nData have been saved to the XML file: " + full_filename )
+   xml_doc.writexml( f, indent='  ', addindent='  ', newl='\r\n' )
+
+   Log.log( "\nData have been saved to the XML file: " + full_filename )
 
    # last unlink xml
    xml_doc.unlink()
@@ -565,11 +770,11 @@ def show_settings_info( title, request_user_confirm = False ):
    if opt.dry_run:
       str_mode = "dry run"
 
-   if opt.update_mode:
-      if str_mode:
-         str_mode = str_mode + " and update"
-      else:
-         str_mode = "update"
+   # if opt.update_mode:
+   #    if str_mode:
+   #       str_mode = str_mode + " and update"
+   #    else:
+   #       str_mode = "update"
 
    if str_mode == None:
       str_mode = "normal"
@@ -577,7 +782,8 @@ def show_settings_info( title, request_user_confirm = False ):
    Log.log("")
    Log.log("  " + title )
    Log.log("")
-   Log.log("  - source root_path : " + str(opt.source_root_path) )
+   Log.log("  - source root_path       : " + str(opt.source_root_path) )
+   Log.log("  - source starting folder : " + str(opt.source_root_path_last_folder) )
    Log.log("  - output file      : " + full_output_filename )
    Log.log("  - section id       : " + str(opt.section_id) )
    Log.log("  - since date       : " + opt.since_date )
@@ -585,7 +791,7 @@ def show_settings_info( title, request_user_confirm = False ):
    Log.log("  - supported comment file types : " + str(supported_comment_file_types)) 
    Log.log("  - verbose : " + str(opt.verbose_mode)) 
    Log.log("  - dry_run mode : " + str(opt.dry_run)) 
-   Log.log("  - update : " + str(opt.update_mode)) 
+   # Log.log("  - update : " + str(opt.update_mode)) 
    Log.log("")
    Log.log("  Notes:")
    Log.log("    * folders/albums with no audio files will not be added by default" )
@@ -610,7 +816,12 @@ def show_settings_info( title, request_user_confirm = False ):
 #
 
 xml_doc = None
+xml_root = None
 xml_section = None
+xml_updates = None
+xml_current_updates = None
+xml_parent_source = None
+
 #xml_mngr = xml_manager()
 
 
@@ -619,30 +830,30 @@ xml_section = None
 #xml_doc.appendChild( xml_root )
 
 
-supported_audio_file_types=['flac','dsd','cue','mp3','m3u','m4a','aac','alac','wav']
-supported_comment_file_types = ['jpg', 'png', 'gif']
+supported_audio_file_types=[ 'aac', 'aiff', 'alac', 'cue', 'dsd', 'flac', 'mp3','m3u','m4a','wav' ]
+supported_comment_file_types = ['jpg', 'png', 'gif', 'txt' ]
 
 p = optparse.OptionParser()
 
 p.add_option("-s", "--source_root_path", action="store", type="string", dest="source_root_path", help="source path to start search" )
-p.add_option("-t", "--target_file", action="store", type="string", dest="target_file", default=None, help="optional alternative target file name" )
+p.add_option("-t", "--target_file", action="store", type="string", dest="target_file", default=None, help="optional alternative target file name [ ak_master_data.xml by default ]" )
 p.add_option("-i", "--section_id", action="store", type="string", dest="section_id", help="optional section id. Default last source path" )
 p.add_option("-o", "--output_path", action="store", type="string", dest="output_path", default="output_data", help="optional output generated files path" )
 p.add_option("-e", "--since_date", action="store", type="string", dest="since_date", default="1900-01-01", help="optional, files since date yyyy-mm-dd" )
 p.add_option("-n", "--no_verbose", action="store_true", dest="verbose_mode", help="no verbose mode" )
 p.add_option("-d", "--dry_run", action="store_true", dest="dry_run", help="dry_run mode" )
-p.add_option("-u", "--update", action="store_true", dest="update_mode", help="update existing target_file with new existing xml_source_path items" )
+# p.add_option("-u", "--update", action="store_true", dest="update_mode", help="update existing target_file with new existing xml_source_path items" )
 
 opt,args = p.parse_args()
 
 
-if opt.update_mode == None:
-   opt.update_mode = False
-else:
-   opt.update_mode = True
+# if opt.update_mode == None:
+#    opt.update_mode = False
+# else:
+#    opt.update_mode = True
 
 
-if opt.update_mode==False and opt.source_root_path == None:
+if opt.source_root_path == None:
    print("Plese enter SOURCE_ROOT_PATH folder. Use -h to show currently available options" )
    sys.exit(1)
 
@@ -659,6 +870,12 @@ else:
 if opt.source_root_path.endswith('/'):
    opt.source_root_path = opt.source_root_path[:-1]
 
+# store the last part of full path, I mean the last folder ( ex: "Volumes/media/audio/flac/w" -> "w" )
+opt.source_root_path_last_folder = os.path.basename( os.path.normpath( opt.source_root_path ) ); 
+
+opt.source_root_path = opt.source_root_path[:-len(opt.source_root_path_last_folder)]
+
+
 if opt.section_id == None: 
    #opt.section_id = opt.source_root_path.replace('/','_') #os.path.basename( opt.root_path ) + "_"
    opt.section_id = os.path.basename( os.path.normpath( opt.source_root_path ) ); 
@@ -666,7 +883,7 @@ if opt.section_id == None:
    #opt.section_id = opt.section_id[:0] + opt.section_id[1:]
 
 if opt.target_file == None:
-   opt.target_file = opt.section_id + ".xml"
+   opt.target_file = "ak_master_data.xml" #opt.section_id + ".xml"
 
 
 full_output_filename = opt.output_path + "/" + opt.target_file
@@ -675,9 +892,9 @@ full_output_filename = opt.output_path + "/" + opt.target_file
 #
 # if update selected then source path will be retrieved from existing taget xml
 #
-if opt.update_mode:
-   opt.section_id = None
-   opt.source_root_path = None
+#if opt.update_mode:
+#   opt.section_id = None
+#   #opt.source_root_path = None
 
 
 #
@@ -705,8 +922,10 @@ total_saved_albums = 0
 g_total_processed_items = 0
 total_saved_albums_size = 0
 
-traverse_folder( "" )
 
+
+traverse_folder( opt.source_root_path_last_folder, True )
+#traverse_folder( )
 
 
 #

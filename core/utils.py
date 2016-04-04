@@ -128,7 +128,7 @@ class FileManager:
 #
 class XmlManager:
 
-   version_value = "01.01.003"
+   xml_file_version = "01.01.013"
 
 
    def __init__( self, work_folder, local_file ):
@@ -145,7 +145,7 @@ class XmlManager:
       self.xml_root = xml_doc.createElement("root")
       self.xml_doc.appendChild( xml_root )
    
-      self.add_attribute( self.xml_root, "version", version_value )
+      self.add_attribute( self.xml_root, "version", xml_file_version )
 
 
 
